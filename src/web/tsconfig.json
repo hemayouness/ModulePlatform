@@ -7,7 +7,8 @@
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
     "paths": {
-      "mfe-contracts": ["./projects/mfe-contracts/src/public-api.ts"]
+      "mfe-contracts": ["./projects/mfe-contracts/src/public-api.ts"],
+      "mfe-platform": ["./projects/mfe-platform/src/public-api.ts"]
     },
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,

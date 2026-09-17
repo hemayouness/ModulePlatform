@@ -3,12 +3,21 @@ import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SHELL_CONTEXT } from 'mfe-contracts';
 import {
-  canEditNeed,
   describeApiError,
+  ErrorBannerComponent,
+  LoadingPlaceholderComponent,
+  PagerComponent,
+  SearchBoxComponent,
+  StatusChipsComponent,
+  StatusPillComponent,
+} from 'mfe-platform';
+import {
+  canEditNeed,
   EmployeeNeedsStore,
   ITEM_CATEGORIES,
   needTotal,
   newItemId,
+  statusTone,
   type EmployeeNeed,
   type NeedItem,
   type StatusFilter,
@@ -35,7 +44,16 @@ function toDraftRow(item: NeedItem): DraftItemRow {
 
 @Component({
   selector: 'en-list',
-  imports: [DecimalPipe, FormsModule],
+  imports: [
+    DecimalPipe,
+    FormsModule,
+    ErrorBannerComponent,
+    LoadingPlaceholderComponent,
+    PagerComponent,
+    SearchBoxComponent,
+    StatusChipsComponent,
+    StatusPillComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <header class="mod-head">
@@ -122,9 +140,7 @@ function toDraftRow(item: NeedItem): DraftItemRow {
       </form>
     }
 
-    @if (store.error(); as err) {
-      <div class="err">{{ err }}</div>
-    }
+    <mfe-error-banner [message]="store.error()" />
 
     <div class="summary">
       <div class="stat">
@@ -134,6 +150,16 @@ function toDraftRow(item: NeedItem): DraftItemRow {
         </span>
       </div>
       <div class="stat">
+        <span class="stat-val">{{ store.pendingCount() }}</span>
+        <span class="stat-lbl">Awaiting approval</span>
+      </div>
+      <!--
+        These two stay page-scoped, and say so. They sum quantity × unitCost and
+        item counts out of the record payload, which the platform stores as an
+        opaque blob — so unlike the counts above, no server-side aggregate for
+        them exists without this module denormalising a numeric column.
+      -->
+      <div class="stat">
         <span class="stat-val">{{ pageTotal() | number }}</span>
         <span class="stat-lbl">This page's value</span>
       </div>
@@ -141,34 +167,37 @@ function toDraftRow(item: NeedItem): DraftItemRow {
         <span class="stat-val">{{ pageItemCount() }}</span>
         <span class="stat-lbl">Items (this page)</span>
       </div>
-      <div class="stat">
-        <span class="stat-val">{{ store.pendingCount() }}</span>
-        <span class="stat-lbl">Awaiting approval</span>
-      </div>
     </div>
 
     <div class="toolbar">
-      <div class="filters">
-        @for (f of filters; track f) {
-          <button class="chip" [class.chip--on]="store.statusFilter() === f"
-                  (click)="store.setStatusFilter(f)">{{ f }}</button>
-        }
-      </div>
+      <mfe-status-chips
+        [options]="filters"
+        [selected]="store.statusFilter()"
+        (selectedChange)="store.setStatusFilter($event)" />
 
-      <form class="search-form" (ngSubmit)="goToId()">
-        <input class="input input--search" placeholder="Jump to id…" [(ngModel)]="searchId" name="searchId" />
-        <button class="btn" type="submit" [disabled]="!searchId().trim() || searchBusy()">
-          {{ searchBusy() ? '…' : 'Go' }}
-        </button>
-      </form>
+      <div class="toolbar-right">
+        <label class="sort-label">
+          Sort
+          <select class="input input--sort" [value]="store.sort() ?? ''"
+                  (change)="onSortChange($any($event.target).value)">
+            @for (option of sortOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+
+        <mfe-search-box
+          [(value)]="searchId"
+          placeholder="Jump to id…"
+          [busy]="searchBusy()"
+          (search)="goToId()" />
+      </div>
     </div>
 
-    @if (searchError(); as err) {
-      <div class="err">{{ err }}</div>
-    }
+    <mfe-error-banner [message]="searchError()" />
 
     @if (store.loading()) {
-      <p class="muted">Loading employee needs…</p>
+      <mfe-loading message="Loading employee needs…" />
     } @else {
       <table class="grid">
         <thead>
@@ -185,10 +214,11 @@ function toDraftRow(item: NeedItem): DraftItemRow {
               <td>{{ n.createdBy }}</td>
               <td class="num">{{ n.items.length }}</td>
               <td class="num">{{ total(n) | number }}</td>
-              <td><span class="pill" [class]="'pill--' + n.status">{{ n.status }}</span></td>
+              <td><mfe-status-pill [label]="n.status" [tone]="tone(n.status)" /></td>
               <td class="row-actions">
                 @if (canEdit(n)) {
                   <button class="btn" (click)="openEditForm(n)">Edit</button>
+                  <button class="btn btn--danger" (click)="removeNeed(n.id)">Delete</button>
                 }
                 @if (n.status === 'draft' && canSubmit) {
                   <button class="btn" (click)="submitNeed(n.id)">Submit</button>
@@ -201,13 +231,10 @@ function toDraftRow(item: NeedItem): DraftItemRow {
         </tbody>
       </table>
 
-      <div class="pager">
-        <button class="btn" type="button" [disabled]="store.pageNumber() <= 1"
-                (click)="store.setPage(store.pageNumber() - 1)">‹ Prev</button>
-        <span class="pager-info">Page {{ store.pageNumber() }} of {{ totalPages() }}</span>
-        <button class="btn" type="button" [disabled]="store.pageNumber() >= totalPages()"
-                (click)="store.setPage(store.pageNumber() + 1)">Next ›</button>
-      </div>
+      <mfe-pager
+        [page]="store.pageNumber()"
+        [totalPages]="store.totalPages()"
+        (pageChange)="store.setPage($event)" />
     }
   `,
   styles: [`
@@ -221,14 +248,13 @@ function toDraftRow(item: NeedItem): DraftItemRow {
     .stat-val { display:block; font-size:1.375rem; font-weight:600; line-height:1.1; }
     .stat-lbl { display:block; font-size:.6875rem; color:#64748b; text-transform:uppercase; letter-spacing:.03em; margin-top:.15rem; }
 
+    /* Chips, search box, pager, banners and the status pill all render through
+       mfe-platform now, so their rules live with those components. What is left
+       here is this module's own layout and its domain-specific form. */
     .toolbar { display:flex; justify-content:space-between; align-items:center; gap:.75rem; margin-bottom:.75rem; flex-wrap:wrap; }
-    .filters { display:flex; gap:.35rem; flex-wrap:wrap; }
-    .chip { font-size:.75rem; padding:.2rem .6rem; border:1px solid #cbd5e1; background:#fff; border-radius:99px; cursor:pointer; text-transform:capitalize; }
-    .chip--on { background:#2563eb; border-color:#2563eb; color:#fff; }
-    .search-form { display:flex; gap:.35rem; }
-    .input--search { width:10rem; }
-    .pager { display:flex; align-items:center; justify-content:center; gap:.9rem; margin-top:.75rem; }
-    .pager-info { font-size:.8125rem; color:#64748b; }
+    .toolbar-right { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; }
+    .sort-label { display:flex; align-items:center; gap:.35rem; font-size:.75rem; color:#64748b; }
+    .input--sort { width:auto; font-size:.75rem; padding:.25rem .4rem; }
 
     .grid { width:100%; border-collapse:collapse; font-size:.875rem; }
     .grid th, .grid td { text-align:left; padding:.5rem .6rem; border-bottom:1px solid #e2e8f0; }
@@ -236,14 +262,10 @@ function toDraftRow(item: NeedItem): DraftItemRow {
     .num { text-align:right; }
     .link { color:#2563eb; cursor:pointer; text-decoration:underline; }
     .empty { color:#94a3b8; text-align:center; padding:1.25rem; }
-    .muted { color:#94a3b8; font-size:.875rem; }
-    .pill { font-size:.6875rem; padding:.15rem .45rem; border-radius:99px; background:#e2e8f0; text-transform:capitalize; }
-    .pill--approved { background:#dcfce7; color:#166534; }
-    .pill--submitted { background:#dbeafe; color:#1e40af; }
-    .pill--rejected { background:#fee2e2; color:#991b1b; }
     .row-actions { display:flex; gap:.35rem; }
     .btn { font-size:.75rem; padding:.25rem .55rem; border:1px solid #cbd5e1; background:#fff; border-radius:4px; cursor:pointer; }
     .btn--primary { background:#2563eb; border-color:#2563eb; color:#fff; padding:.4rem .8rem; font-size:.8125rem; }
+    .btn--danger { color:#991b1b; border-color:#fecaca; }
     .btn--icon { padding:.15rem .4rem; color:#991b1b; border-color:#fecaca; }
     .btn:disabled { opacity:.5; cursor:not-allowed; }
 
@@ -261,7 +283,6 @@ function toDraftRow(item: NeedItem): DraftItemRow {
     .items-grid td { padding:.25rem .35rem; }
     .line-total { font-variant-numeric:tabular-nums; padding-right:.5rem; color:#334155; }
     .draft-total { font-size:.875rem; color:#334155; }
-    .err { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:.5rem .75rem; border-radius:6px; font-size:.8125rem; margin-bottom:.75rem; }
   `],
 })
 export class EmployeeNeedsListComponent {
@@ -275,9 +296,25 @@ export class EmployeeNeedsListComponent {
 
   protected readonly filters: StatusFilter[] = ['all', 'draft', 'submitted', 'approved', 'rejected'];
 
-  protected readonly totalPages = computed(() =>
-    Math.max(1, Math.ceil(this.store.totalCount() / this.store.pageSize)),
-  );
+  /**
+   * Only real columns are offered — the platform rejects a sort over anything
+   * inside the record payload, so offering "by title" here would produce a 400
+   * rather than a slow query.
+   */
+  protected readonly sortOptions: readonly { value: string; label: string }[] = [
+    { value: '', label: 'Oldest first' },
+    { value: '-createdAt', label: 'Newest first' },
+    { value: 'status', label: 'Status' },
+    { value: '-updatedAt', label: 'Recently updated' },
+  ];
+
+  protected onSortChange(value: string): void {
+    this.store.setSort(value || null);
+  }
+
+  protected tone(status: EmployeeNeed['status']) {
+    return statusTone(status);
+  }
 
   /**
    * Deliberately scoped to the current page, not the whole (filtered)
@@ -431,6 +468,14 @@ export class EmployeeNeedsListComponent {
       await this.store.submit(id);
     } catch (err) {
       this.store.error.set(describeApiError(err, 'Failed to submit need.'));
+    }
+  }
+
+  protected async removeNeed(id: string): Promise<void> {
+    try {
+      await this.store.remove(id);
+    } catch (err) {
+      this.store.error.set(describeApiError(err, 'Failed to delete need.'));
     }
   }
 

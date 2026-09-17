@@ -1,0 +1,13 @@
+{
+  "name": "mfe-platform",
+  "version": "1.0.0",
+  "peerDependencies": {
+    "@angular/common": "^21.2.0",
+    "@angular/core": "^21.2.0",
+    "mfe-contracts": "^1.0.0"
+  },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  },
+  "sideEffects": false
+}

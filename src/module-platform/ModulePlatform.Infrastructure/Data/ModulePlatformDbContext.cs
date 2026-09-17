@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using ModulePlatform.Core.Domain;
 
 namespace ModulePlatform.Infrastructure.Data;
@@ -127,6 +128,21 @@ public class ModulePlatformDbContext(DbContextOptions<ModulePlatformDbContext> o
             if (Database.IsSqlServer())
             {
                 e.Property(x => x.DataJson).HasColumnType("nvarchar(max)");
+            }
+            else
+            {
+                // SQLite — which the test suite runs the same model on — refuses
+                // to ORDER BY a DateTimeOffset at all. Listing a collection is
+                // ordered by CreatedAt by default, so without this the ordering
+                // behaviour simply could not be tested against a real relational
+                // provider. Storing UTC ticks keeps the sort order identical to
+                // SQL Server's, and every value written here is already UTC.
+                var utcTicks = new ValueConverter<DateTimeOffset, long>(
+                    v => v.UtcTicks,
+                    v => new DateTimeOffset(v, TimeSpan.Zero));
+
+                e.Property(x => x.CreatedAt).HasConversion(utcTicks);
+                e.Property(x => x.UpdatedAt).HasConversion(utcTicks);
             }
         });
     }

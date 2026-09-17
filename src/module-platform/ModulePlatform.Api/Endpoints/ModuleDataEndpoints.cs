@@ -1,7 +1,10 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using ModulePlatform.Core.Domain;
+using ModulePlatform.Core.Options;
 using ModulePlatform.Infrastructure.Data;
 
 namespace ModulePlatform.Api.Endpoints;
@@ -37,6 +40,23 @@ namespace ModulePlatform.Api.Endpoints;
 /// <c>id</c> always has been.
 /// </para>
 /// <para>
+/// Ordering is <c>?sort=</c>, over real columns only (see
+/// <see cref="ModuleRecordSort"/>), defaulting to <c>createdAt</c> ascending as
+/// it always did. Page size is capped by
+/// <see cref="ModulePlatformOptions.MaxPageSize"/> and an over-large request is
+/// refused rather than quietly trimmed — see <see cref="ModuleRecordPaging"/>
+/// for why silently returning fewer rows than asked for is the more dangerous
+/// of the two options.
+/// </para>
+/// <para>
+/// <c>GET /count</c> answers "how many, broken down by status" in a single
+/// grouped query. It exists because the alternative a caller reaches for —
+/// listing with a filter purely to read <c>X-Total-Count</c> — transfers and
+/// discards every matching record, and needs one round trip per status. It sits
+/// inside the same route group, so it carries the same policy (and the same gap)
+/// as everything else here.
+/// </para>
+/// <para>
 /// A record's id is likewise always platform-generated (see
 /// <see cref="NextExternalIdAsync"/>) — <c>POST</c> never reads one from the
 /// body, so a module never invents its own id-collision handling the way an
@@ -55,7 +75,17 @@ public static class ModuleDataEndpoints
 
         group.MapGet("/", ListAsync)
             .WithName("ListModuleRecords")
-            .WithSummary("All records in one module's collection, as parsed JSON.");
+            .WithSummary("All records in one module's collection, as parsed JSON.")
+            .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        // Registered before the `/{externalId}` route for readability only:
+        // ASP.NET Core ranks a literal segment above a parameter one regardless
+        // of order, the same reasoning as `/api/modules/admin`. The cost is that
+        // "count" can never be an external id — safe here because ids are
+        // platform-generated and purely numeric (see NextExternalIdAsync).
+        group.MapGet("/count", CountAsync)
+            .WithName("CountModuleRecords")
+            .WithSummary("Total and per-status counts for one collection, in a single query.");
 
         group.MapGet("/{externalId}", GetAsync)
             .WithName("GetModuleRecord")
@@ -81,38 +111,76 @@ public static class ModuleDataEndpoints
 
     /// <summary>
     /// Lists a module's collection, optionally filtered by the two indexed
-    /// generic columns and/or paginated.
+    /// generic columns, ordered, and/or paginated.
     /// </summary>
     /// <remarks>
-    /// <paramref name="page"/>/<paramref name="pageSize"/> are opt-in: when
-    /// omitted, every matching row is returned exactly as before (no breaking
-    /// change for existing callers). The total count after filtering (before
-    /// paging) is always reported via the <c>X-Total-Count</c> response
+    /// <paramref name="page"/>/<paramref name="pageSize"/> are opt-in: when both
+    /// are omitted, every matching row is returned exactly as before (no
+    /// breaking change for existing callers). The total count after filtering
+    /// (before paging) is always reported via the <c>X-Total-Count</c> response
     /// header, so a caller can start paginating without a body-shape change.
+    /// A caller that only wants that number should use <see cref="CountAsync"/>
+    /// instead — filtering a list purely to read the header transfers every
+    /// matching record and throws them away.
     /// </remarks>
     private static async Task<IResult> ListAsync(
-        string moduleName, string collection, string? status, string? createdBy,
-        int? page, int? pageSize, HttpContext http, ModulePlatformDbContext db, CancellationToken ct)
+        string moduleName, string collection, string? status, string? createdBy, string? sort,
+        int? page, int? pageSize, HttpContext http, ModulePlatformDbContext db,
+        IOptions<ModulePlatformOptions> options, CancellationToken ct)
     {
-        var query = db.ModuleRecords
-            .AsNoTracking()
-            .Where(r => r.ModuleName == moduleName && r.Collection == collection);
-
-        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(r => r.Status == status);
-        if (!string.IsNullOrWhiteSpace(createdBy)) query = query.Where(r => r.CreatedBy == createdBy);
-
-        query = query.OrderBy(r => r.CreatedAt);
-
-        var totalCount = await query.CountAsync(ct);
-        http.Response.Headers["X-Total-Count"] = totalCount.ToString();
-
-        if (page is > 0 && pageSize is > 0)
+        if (!ModuleRecordSort.TryParse(sort, out var order, out var sortError))
         {
-            query = query.Skip((page.Value - 1) * pageSize.Value).Take(pageSize.Value);
+            return Results.Problem(
+                title: "invalid_sort", detail: sortError,
+                statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var rows = await query.ToListAsync(ct);
+        var limits = options.Value;
+        if (!ModuleRecordPaging.TryParse(
+                page, pageSize, limits.MaxPageSize, limits.DefaultPageSize,
+                out var paging, out var pagingError))
+        {
+            return Results.Problem(
+                title: "invalid_paging", detail: pagingError,
+                statusCode: StatusCodes.Status400BadRequest,
+                extensions: new Dictionary<string, object?> { ["maxPageSize"] = limits.MaxPageSize });
+        }
+
+        var query = db.Filtered(moduleName, collection, status, createdBy);
+
+        // Counted after filtering but before ordering and paging — unchanged
+        // contract, and the reason a caller can paginate without the response
+        // body ever growing an envelope.
+        var totalCount = await query.CountAsync(ct);
+        http.Response.Headers["X-Total-Count"] = totalCount.ToString(CultureInfo.InvariantCulture);
+
+        var rows = await paging.Apply(order.Apply(query)).ToListAsync(ct);
         return Results.Ok(rows.Select(ToDto));
+    }
+
+    /// <summary>
+    /// How many records match, in total and broken down by status, in one
+    /// grouped query.
+    /// </summary>
+    /// <remarks>
+    /// Honours the same <c>?status=</c>/<c>?createdBy=</c> filters as the list
+    /// route, so the two compose predictably (<c>?createdBy=…</c> gives "my
+    /// records, by status"). Records with no status group under a <c>null</c>
+    /// key rather than some invented name — the platform does not get to decide
+    /// what a module's absent status means.
+    /// </remarks>
+    private static async Task<IResult> CountAsync(
+        string moduleName, string collection, string? status, string? createdBy,
+        ModulePlatformDbContext db, CancellationToken ct)
+    {
+        var buckets = await db.CountByStatusAsync(moduleName, collection, status, createdBy, ct);
+
+        return Results.Ok(new
+        {
+            // Summed from the buckets already in hand, so this stays one round trip.
+            total = buckets.Sum(b => b.Count),
+            byStatus = buckets.Select(b => new { status = b.Status, count = b.Count }),
+        });
     }
 
     private static async Task<IResult> GetAsync(

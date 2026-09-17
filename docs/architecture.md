@@ -82,8 +82,11 @@ That single property is what removes the need for a site per remote.
         /src/app/requests               the feature: routes, components, store
         federation.config.js            exposes ./Routes and ./Module
         module.json                     package manifest (name, version, entry, …)
-      /mfe-contracts                    THE shared contract package
+      /mfe-contracts                    THE shared contract package (interfaces only)
         /src/lib                        auth, event bus, shell context, descriptors
+      /mfe-platform                     the platform SDK — real code, NOT runtime-shared
+        /src/lib/data                   generic collection store, wire types, error reader
+        /src/lib/ui                     pager, filter chips, search box, banners, status pill
     /tools
       pack-module.mjs                   build output → validated module ZIP
       deploy-shell.mjs                  shell build → ASP.NET Core wwwroot
@@ -224,6 +227,7 @@ To move to blob storage: implement the interface, change one DI registration in
 | `@angular/core`, `common`, `router`, `platform-browser` | **Yes**, singleton + strictVersion | Two Angular instances means two DI graphs, two routers, broken `inject()`. Non-negotiable. |
 | `rxjs`, `tslib` | **Yes**, singleton | `instanceof` checks and operator identity break across copies. |
 | `mfe-contracts` | **Yes**, via `sharedMappings` | `SHELL_CONTEXT` must be **one** `InjectionToken` instance or injection silently fails. |
+| `mfe-platform` | **No — deliberately.** Build-time only | The platform SDK (paging, filtering, sorting, record cache, CRUD, shared controls). It carries no token whose identity must be shared, so it does not need to be a singleton — and making it one would be actively harmful. Mapped paths get **no version negotiation**, so a shared copy means whichever loads first wins for the whole page: a module built against a newer SDK would silently execute an older one. Left out of `sharedMappings`, each module bundles its own copy pinned at build time. Cost: a few KB per module, and upgrading is the ordinary publish-a-new-module-version flow. |
 | A UI component library | **Yes**, singleton, if all teams agree the version | Shared theming and one copy of a large dependency. Cost: lockstep upgrades. |
 | Shell application services | **Never** | Would couple every remote to Shell internals and destroy independent deployability. |
 | Another module's services | **Never** | `Requests → Approvals` coupling is exactly what this architecture exists to prevent. |

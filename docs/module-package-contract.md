@@ -93,7 +93,14 @@ because Native Federation emits only relative imports and derives the base URL f
    emit relative references.
 
 6. **Do not import from the Shell or another module.** The only permitted shared
-   application code is `mfe-contracts`.
+   application code is `mfe-contracts` and `mfe-platform`.
+
+   The two are shared in different ways, on purpose. `mfe-contracts` is listed in
+   `sharedMappings` because `SHELL_CONTEXT`'s token identity must be the same object
+   across the page. `mfe-platform` is **not** listed: it holds no such identity, and
+   mapped paths get no version negotiation, so sharing real code that way means the
+   first copy loaded wins for every module. It is consumed like an ordinary library and
+   bundled into each remote at build time.
 
 ---
 

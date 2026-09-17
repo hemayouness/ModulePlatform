@@ -34,6 +34,31 @@ public sealed class ModulePlatformOptions
         ["api", "admin", "shell", "modules", "assets", "static", "health", "current", "latest"];
 
     /// <summary>
+    /// Largest <c>?pageSize=</c> the generic module-data list endpoint accepts.
+    /// </summary>
+    /// <remarks>
+    /// A bigger page is <b>rejected with 400, not silently clamped</b>. Every
+    /// paginated UI computes its own <c>totalPages = ceil(totalCount /
+    /// pageSize)</c>; if the server quietly returned fewer rows than asked for,
+    /// that arithmetic would still use the requested size, so the client would
+    /// believe it had shown everything while silently hiding most of the
+    /// collection — a data-correctness bug that surfaces no error anywhere. A
+    /// 400 costs a developer one round trip and cannot hide data.
+    ///
+    /// Note this bounds row <i>count</i>, not response <i>bytes</i>: a record's
+    /// <c>DataJson</c> is unbounded, so a real size ceiling would need a
+    /// separate response-length limit.
+    /// </remarks>
+    public int MaxPageSize { get; set; } = 200;
+
+    /// <summary>
+    /// Page size applied when a caller supplies <c>?page=</c> without saying how
+    /// big a page is. Paging itself stays opt-in — omit both and every matching
+    /// row is returned, exactly as before pagination existed.
+    /// </summary>
+    public int DefaultPageSize { get; set; } = 50;
+
+    /// <summary>
     /// How long browsers may cache versioned artifacts. Safe to make very long
     /// because <c>/modules/{name}/{version}/*</c> is immutable by construction.
     /// </summary>

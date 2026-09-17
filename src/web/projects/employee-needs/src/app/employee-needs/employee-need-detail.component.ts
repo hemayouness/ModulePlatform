@@ -1,17 +1,24 @@
 import { ChangeDetectionStrategy, Component, inject, input, computed, signal, effect } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { SHELL_CONTEXT } from 'mfe-contracts';
-import { EmployeeNeedsStore, ITEM_CATEGORIES, needTotal, type EmployeeNeed } from './employee-needs.service';
+import { LoadingPlaceholderComponent, StatusPillComponent } from 'mfe-platform';
+import {
+  EmployeeNeedsStore,
+  ITEM_CATEGORIES,
+  needTotal,
+  statusTone,
+  type EmployeeNeed,
+} from './employee-needs.service';
 
 @Component({
   selector: 'en-detail',
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, LoadingPlaceholderComponent, StatusPillComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <a class="link" (click)="back()">&larr; Back to Employee Needs</a>
 
     @if (loading()) {
-      <p class="muted">Loading <code>{{ id() }}</code>…</p>
+      <mfe-loading [message]="'Loading ' + id() + '…'" />
     } @else if (need(); as n) {
       <header class="detail-head">
         <div>
@@ -20,7 +27,7 @@ import { EmployeeNeedsStore, ITEM_CATEGORIES, needTotal, type EmployeeNeed } fro
             <code>{{ n.id }}</code> · requested by <strong>{{ n.createdBy }}</strong>
           </p>
         </div>
-        <span class="pill" [class]="'pill--' + n.status">{{ n.status }}</span>
+        <mfe-status-pill [label]="n.status" [tone]="tone(n.status)" />
       </header>
 
       @if (n.notes) {
@@ -69,10 +76,7 @@ import { EmployeeNeedsStore, ITEM_CATEGORIES, needTotal, type EmployeeNeed } fro
     .num { text-align:right; }
     .total-label { font-weight:600; color:#334155; border-bottom:none; }
     .total-value { font-weight:700; font-size:1rem; border-bottom:none; }
-    .pill { font-size:.6875rem; padding:.2rem .55rem; border-radius:99px; background:#e2e8f0; text-transform:capitalize; align-self:flex-start; }
-    .pill--approved { background:#dcfce7; color:#166534; }
-    .pill--submitted { background:#dbeafe; color:#1e40af; }
-    .pill--rejected { background:#fee2e2; color:#991b1b; }
+    mfe-status-pill { align-self:flex-start; }
     .muted { color:#64748b; }
   `],
 })
@@ -108,6 +112,10 @@ export class EmployeeNeedDetailComponent {
 
   protected categoryLabel(value: string): string {
     return ITEM_CATEGORIES.find((c) => c.value === value)?.label ?? value;
+  }
+
+  protected tone(status: EmployeeNeed['status']) {
+    return statusTone(status);
   }
 
   protected back(): void {

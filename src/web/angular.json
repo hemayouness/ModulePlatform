@@ -184,6 +184,32 @@
         }
       }
     },
+    "mfe-platform": {
+      "projectType": "library",
+      "root": "projects/mfe-platform",
+      "sourceRoot": "projects/mfe-platform/src",
+      "prefix": "mfe",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:ng-packagr",
+          "configurations": {
+            "production": {
+              "tsConfig": "projects/mfe-platform/tsconfig.lib.prod.json"
+            },
+            "development": {
+              "tsConfig": "projects/mfe-platform/tsconfig.lib.json"
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "projects/mfe-platform/tsconfig.spec.json"
+          }
+        }
+      }
+    },
     "mfe-contracts": {
       "projectType": "library",
       "root": "projects/mfe-contracts",
