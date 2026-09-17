@@ -1,0 +1,26 @@
+# ---- .NET ----
+bin/
+obj/
+*.user
+publish/
+
+# Installed module artifacts and staging. These are runtime state, not source:
+# modules are (re)installed through the API, never committed.
+src/module-platform/ModulePlatform.Api/storage/
+
+# The Shell is built into wwwroot by `npm run shell`; it is build output.
+src/module-platform/ModulePlatform.Api/wwwroot/
+
+# ---- Node / Angular ----
+node_modules/
+dist/
+.angular/
+*.log
+
+# ---- Editors / OS ----
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+Thumbs.db
+.DS_Store

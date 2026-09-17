@@ -1,0 +1,46 @@
+{
+  "name": "web",
+  "version": "0.0.0",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve",
+    "build": "ng build",
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test",
+    "start:shell": "ng serve shell",
+    "build:shell": "ng build shell",
+    "deploy:shell": "node tools/deploy-shell.mjs",
+    "shell": "npm run build:shell && npm run deploy:shell",
+    "start:employee-needs": "ng serve employee-needs",
+    "build:employee-needs": "ng build employee-needs",
+    "pack:employee-needs": "node tools/pack-module.mjs employee-needs",
+    "module:employee-needs": "npm run build:employee-needs && npm run pack:employee-needs"
+  },
+  "private": true,
+  "packageManager": "npm@11.8.0",
+  "dependencies": {
+    "@angular-architects/native-federation": "^21.2.6",
+    "@angular/animations": "^21.2.0",
+    "@angular/common": "^21.2.0",
+    "@angular/compiler": "^21.2.0",
+    "@angular/core": "^21.2.0",
+    "@angular/forms": "^21.2.0",
+    "@angular/platform-browser": "^21.2.0",
+    "@angular/router": "^21.2.0",
+    "@softarc/native-federation-node": "^3.3.4",
+    "es-module-shims": "^1.5.12",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "^21.2.24",
+    "@angular/build": "^21.2.24",
+    "@angular/cli": "^21.2.24",
+    "@angular/compiler-cli": "^21.2.0",
+    "archiver": "^8.0.0",
+    "jsdom": "^28.0.0",
+    "prettier": "^3.8.1",
+    "typescript": "~5.9.2",
+    "vitest": "^4.0.8"
+  }
+}

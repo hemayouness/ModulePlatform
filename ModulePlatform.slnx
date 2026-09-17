@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/module-platform/">
+    <Project Path="src/module-platform/ModulePlatform.Api/ModulePlatform.Api.csproj" />
+    <Project Path="src/module-platform/ModulePlatform.Core/ModulePlatform.Core.csproj" />
+    <Project Path="src/module-platform/ModulePlatform.Infrastructure/ModulePlatform.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ModulePlatform.Tests/ModulePlatform.Tests.csproj" />
+  </Folder>
+</Solution>

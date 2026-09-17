@@ -1,0 +1,14 @@
+{
+  "name": "employee-needs",
+  "displayName": "Employee Needs",
+  "version": "1.4.1",
+  "description": "Employees request equipment, software, travel and other items they need for work.",
+  "entry": "remoteEntry.json",
+  "routesExposedModule": "./Routes",
+  "navigation": {
+    "icon": "🧾",
+    "order": 10
+  },
+  "requiredPermissions": ["employee-needs.read"],
+  "contractsVersion": "1.0.0"
+}
